@@ -17,6 +17,7 @@ from model_utils import (
             get_t_schedule, 
             get_loss_weights, 
             sds_vsd_grad_diffuser, 
+            vsd_minus_grad_diffuser,
             phi_vsd_grad_diffuser, 
             extract_lora_diffusers,
             predict_noise0_diffuser,
@@ -27,6 +28,7 @@ from model_utils import (
             )
 import shutil
 import logging
+import math
 
 # from diffusers import StableDiffusionPipeline
 from transformers import CLIPTextModel, CLIPTokenizer
@@ -100,13 +102,23 @@ def get_parser(**parser_kwargs):
     parser.add_argument('--loss_weight_type', type=str, default='none', help='type of loss weight')
     parser.add_argument('--nerf_init', type=str2bool, default=False, help='initialize with diffusion models as mean predictor')
     parser.add_argument('--grad_scale', type=float, default=1., help='grad_scale for loss in vsd')
+    ### ours 
+    parser.add_argument('--minus_ratio', type=float, default=0.9, help='minus_ratio for ours')
+    parser.add_argument('--minus_random', type=str2bool, default=False, help='minus_random for ours')
+    parser.add_argument('--guidance_scale_qt', type=float, default=1., help='guidance_scale_qt for ours')
+    parser.add_argument('--version', type=str, default='w1_eps1_eps_w2_eps2_eps', help='version for ours in "w_eps1_eps2", "w1_eps1_w2_eps2", "w1_eps1_eps_w2_eps2_eps"')
+
     args = parser.parse_args()
     # create working directory
     args.run_id = args.run_date + '_' + args.run_time
-    args.work_dir = f'{args.work_dir}_{args.run_id}_{args.generation_mode}_cfg_{args.guidance_scale}_bs_{args.batch_size}_num_steps_{args.num_steps}_tschedule_{args.t_schedule}'
-    args.work_dir = args.work_dir + f'_{args.phi_model}' if args.generation_mode == 'vsd' else args.work_dir
+    if args.generation_mode != 'ours':
+        args.work_dir = f'{args.work_dir}_{args.run_id}_{args.generation_mode}_cfg_{args.guidance_scale}_bs_{args.batch_size}_num_steps_{args.num_steps}_tschedule_{args.t_schedule}'
+        args.work_dir = args.work_dir + f'_{args.phi_model}' if args.generation_mode == 'vsd' else args.work_dir
+    else:
+        args.work_dir = f'{args.work_dir}_version_{args.version}_minus_ratio_{args.minus_ratio}_random_{args.minus_random}_cfg_{args.guidance_scale}_cfg_qt_{args.guidance_scale_qt}_{args.run_id}'
+
     os.makedirs(args.work_dir, exist_ok=True)
-    assert args.generation_mode in ['t2i', 'sds', 'vsd']
+    assert args.generation_mode in ['t2i', 'sds', 'vsd', 'ours']
     assert args.phi_model in ['lora', 'unet_simple']
     if args.init_img_path:
         assert args.batch_size == 1
@@ -378,7 +390,7 @@ def main():
                     image_progress.append((image/2+0.5).clamp(0, 1))
             step += 1
     ### sds text to image generation
-    elif args.generation_mode in ['sds', 'vsd']:
+    elif args.generation_mode in ['sds', 'vsd', 'ours']:
         cross_attention_kwargs = {'scale': args.lora_scale} if (args.generation_mode == 'vsd' and args.phi_model == 'lora') else {}
         for step, chosen_t in enumerate(pbar):
             # get latent of all particles
@@ -395,18 +407,46 @@ def main():
             # predict x0 use ddim sampling
             # z0_latents = predict_x0_diffuser(unet, scheduler, noisy_latents, text_embeddings, t, guidance_scale=args.guidance_scale)
             # loss step
-            grad_, noise_pred, noise_pred_phi = sds_vsd_grad_diffuser(unet, noisy_latents, noise, text_embeddings_vsd, t, \
-                                                    guidance_scale=args.guidance_scale, unet_phi=unet_phi, \
-                                                        generation_mode=args.generation_mode, phi_model=args.phi_model, \
-                                                            cross_attention_kwargs=cross_attention_kwargs, \
-                                                                multisteps=args.multisteps, scheduler=scheduler, lora_v=args.lora_vprediction, \
-                                                                    half_inference=args.half_inference, \
-                                                                        cfg_phi=args.cfg_phi, grad_scale=args.grad_scale)
-            ## weighting
-            grad_ *= loss_weights[int(t)]
-            # ref: https://github.com/threestudio-project/threestudio/blob/5e29759db7762ec86f503f97fe1f71a9153ce5d9/threestudio/models/guidance/stable_diffusion_guidance.py#L427
-            # construct loss
-            target = (latents_vsd - grad_).detach()
+            if args.generation_mode in ['sds', 'vsd']:
+
+                grad_, noise_pred, noise_pred_phi = sds_vsd_grad_diffuser(unet, noisy_latents, noise, text_embeddings_vsd, t, \
+                                                        guidance_scale=args.guidance_scale, unet_phi=unet_phi, \
+                                                            generation_mode=args.generation_mode, phi_model=args.phi_model, \
+                                                                cross_attention_kwargs=cross_attention_kwargs, \
+                                                                    multisteps=args.multisteps, scheduler=scheduler, lora_v=args.lora_vprediction, \
+                                                                        half_inference=args.half_inference, \
+                                                                            cfg_phi=args.cfg_phi, grad_scale=args.grad_scale)
+                ## weighting
+                grad_ *= loss_weights[int(t)]
+                # ref: https://github.com/threestudio-project/threestudio/blob/5e29759db7762ec86f503f97fe1f71a9153ce5d9/threestudio/models/guidance/stable_diffusion_guidance.py#L427
+                # construct loss
+                target = (latents_vsd - grad_).detach()
+            else:
+                if args.minus_random:
+                    if args.minus_ratio < 1: # t_minus is smaller than t
+                        t_minused = args.minus_ratio * (chosen_t - args.t_start) * torch.rand_like(t.float())
+                    else: # t_minus is larger than t
+                        t_minused = -1 * (args.minus_ratio - 1) * (args.t_end - chosen_t) * torch.rand_like(t.float())
+                else:
+                    if args.minus_ratio <= 1: # t_minus is smaller than t
+                        t_minused = args.minus_ratio * (chosen_t - args.t_start)
+                    else: # t_minus is larger than t
+                        t_minused = -1 * (args.minus_ratio - 1) * (args.t_end - chosen_t)
+
+                t_minus = t - torch.tensor([t_minused]).to(device)
+                t_minus = torch.clamp(t_minus, min=args.t_start, max=args.t_end, ).type(torch.long)
+
+                noisy_latents_qt = scheduler.add_noise(latents_vsd, noise, t_minus)
+                grad_, noise_pred, noise_pred_phi = vsd_minus_grad_diffuser(unet, noisy_latents, noisy_latents_qt, noise, text_embeddings_vsd, t, t_minus, \
+                                                                            guidance_scale=args.guidance_scale, guidance_scale_qt=args.guidance_scale_qt, \
+                                                                            grad_scale=loss_weights[int(t)], grad_scale_qt=loss_weights[int(t_minus)], \
+                                                                                half_inference=args.half_inference, scheduler=scheduler,
+                                                                                    version=args.version)
+                
+                ## no need to weight grad_ here
+                target = (latents_vsd - grad_).detach()
+
+
             # d(loss)/d(latents) = latents - target = latents - (latents - grad) = grad
             loss = 0.5 * F.mse_loss(latents_vsd, target, reduction="mean") / args.batch_size
             loss.backward()

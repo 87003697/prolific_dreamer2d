@@ -264,6 +264,30 @@ def sds_vsd_grad_diffuser(unet, noisy_latents, noise, text_embeddings, t, unet_p
     ## return grad
     return grad, noise_pred.detach().clone(), noise_pred_phi.detach().clone()
 
+def vsd_minus_grad_diffuser(unet, noisy_latents, nosity_latents_qt, noise, text_embeddings, \
+                            t, t_minus, grad_scale, grad_scale_qt,  guidance_scale=7.5, guidance_scale_qt=1., \
+                            half_inference = False, scheduler=None, version = 'w1_eps1_eps_w2_eps2_eps'):
+    assert version in ['w_eps1_eps2', 'w1_eps1_w2_eps2', 'w1_eps1_eps_w2_eps2_eps']
+    # our proposed method
+    with torch.no_grad():
+        # predict the noise residual with unet
+        noise_pred_p  = predict_noise0_diffuser(unet, noisy_latents, text_embeddings, t, guidance_scale=guidance_scale, half_inference=half_inference, scheduler=scheduler)
+        noise_pred_qt = predict_noise0_diffuser(unet, nosity_latents_qt, text_embeddings, t_minus, guidance_scale=guidance_scale_qt, half_inference=half_inference, scheduler=scheduler)
+
+    if version == 'w_eps1_eps2':
+        grad = grad_scale * (noise_pred_p - noise_pred_qt)
+    elif version == 'w1_eps1_w2_eps2':
+        grad = grad_scale * noise_pred_p - grad_scale_qt * noise_pred_qt
+    elif version == 'w1_eps1_eps_w2_eps2_eps':
+        grad = grad_scale * (noise_pred_p - noise) - grad_scale_qt * (noise_pred_qt - noise)
+    
+    grad = torch.nan_to_num(grad)
+
+    ## return grad
+    return grad, noise_pred_p.detach().clone(), noise_pred_qt.detach().clone()
+        
+
+
 def phi_vsd_grad_diffuser(unet_phi, latents, noise, text_embeddings, t, cfg_phi=1., grad_scale=1, cross_attention_kwargs={}, scheduler=None, lora_v=False, half_inference=False):
     loss_fn = nn.MSELoss()
     # ref to https://github.com/ashawkey/stable-dreamfusion/blob/main/guidance/sd_utils.py#L114
