@@ -112,10 +112,10 @@ def get_parser(**parser_kwargs):
     # create working directory
     args.run_id = args.run_date + '_' + args.run_time
     if args.generation_mode != 'ours':
-        args.work_dir = f'{args.work_dir}_{args.run_id}_{args.generation_mode}_cfg_{args.guidance_scale}_bs_{args.batch_size}_num_steps_{args.num_steps}_tschedule_{args.t_schedule}'
+        args.work_dir = f'{args.work_dir}/{args.prompt}_{args.generation_mode}_cfg_{args.guidance_scale}_bs_{args.batch_size}_num_steps_{args.num_steps}_tschedule_{args.t_schedule}_{args.run_id}'
         args.work_dir = args.work_dir + f'_{args.phi_model}' if args.generation_mode == 'vsd' else args.work_dir
     else:
-        args.work_dir = f'{args.work_dir}_version_{args.version}_minus_ratio_{args.minus_ratio}_random_{args.minus_random}_cfg_{args.guidance_scale}_cfg_qt_{args.guidance_scale_qt}_{args.run_id}'
+        args.work_dir = f'{args.work_dir}/{args.prompt}_minus_ratio_{args.minus_ratio}_random_{args.minus_random}_version_{args.version}_cfg_{args.guidance_scale}_cfg_qt_{args.guidance_scale_qt}_{args.run_id}'
 
     os.makedirs(args.work_dir, exist_ok=True)
     assert args.generation_mode in ['t2i', 'sds', 'vsd', 'ours']
