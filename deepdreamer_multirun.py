@@ -423,6 +423,7 @@ prompts = [
     "Wedding dress made of tentacles"
 ]
 
+# gpus = [12, 13, 14, 15]
 gpus = [4, 5, 6, 7]
 
 command_list = []
@@ -431,12 +432,14 @@ for index, prompt in tqdm(enumerate(prompts)):
             'CUDA_VISIBLE_DEVICES={} python prolific_dreamer2d.py \
                     --num_steps 1500 --log_steps 50 \
                     --seed 1024 --lr 0.03 \
-                    --model_path "stabilityai/stable-diffusion-2-1-base" --work_dir "work_dir/dream_fusion2d" \
-                    --loss_weight_type "1m_alphas_cumprod" --t_schedule "descend" \
-                    --generation_mode "sds" \
+                    --model_path "stabilityai/stable-diffusion-2-1-base" --work_dir "work_dir/deep_dreamer2d" \
+                    --loss_weight_type "1m_alphas_cumprod" --t_schedule "random" \
+                    --generation_mode "ours" \
                     --prompt "{}" \
                     --height 512 --width 512 --batch_size 16 --guidance_scale 7.5 \
-                    --log_progress false --save_x0 false'.format(gpus[index % len(gpus)], prompt)
+                    --particle_num_vsd 2 \
+                    --minus_ratio 1.5 --minus_random true --version "w_eps1_eps2" \
+                    --log_progress false --save_x0 false --save_phi_model false'.format(gpus[index % len(gpus)], prompt)
         )
 
 # Maximum number of subprocesses to have running at a time

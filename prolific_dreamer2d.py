@@ -106,7 +106,7 @@ def get_parser(**parser_kwargs):
     parser.add_argument('--minus_ratio', type=float, default=0.9, help='minus_ratio for ours')
     parser.add_argument('--minus_random', type=str2bool, default=False, help='minus_random for ours')
     parser.add_argument('--guidance_scale_qt', type=float, default=1., help='guidance_scale_qt for ours')
-    parser.add_argument('--version', type=str, default='w1_eps1_eps_w2_eps2_eps', help='version for ours in "w_eps1_eps2", "w1_eps1_w2_eps2", "w1_eps1_eps_w2_eps2_eps"')
+    parser.add_argument('--version', type=str, default='w_eps1_eps2', help='version for ours in "w_eps1_eps2", "w1_eps1_w2_eps2", "w1_eps1_eps_w2_eps2_eps"')
 
     args = parser.parse_args()
     # create working directory
