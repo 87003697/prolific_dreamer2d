@@ -123,7 +123,7 @@ def get_parser(**parser_kwargs):
     if args.init_img_path:
         assert args.batch_size == 1
     # for sds and t2i, use only args.batch_size
-    if args.generation_mode in ['t2i', 'sds']:
+    if args.generation_mode in ['t2i']:
         args.particle_num_vsd = args.batch_size
         args.particle_num_phi = args.batch_size
     assert (args.batch_size >= args.particle_num_vsd) and (args.batch_size >= args.particle_num_phi)
@@ -199,7 +199,11 @@ def main():
     scheduler.betas = scheduler.betas.to(device)
     scheduler.alphas = scheduler.alphas.to(device)
     scheduler.alphas_cumprod = scheduler.alphas_cumprod.to(device)
-    
+
+    vae = vae.eval()
+    unet = unet.eval()
+    text_encoder = text_encoder.eval()
+
     if args.generation_mode == 'vsd':
         if args.phi_model == 'lora':
             if args.lora_vprediction:
