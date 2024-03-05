@@ -21,8 +21,20 @@ def get_t_schedule(num_train_timesteps, args, loss_weight=None):
     assert (args.t_start >= 20) and (args.t_end <= 980)
     ts = ts[args.t_start:args.t_end]
 
+    if args.t_schedule == 'custom':
+        # If the scheduling strategy is 'custom', parse the custom time steps from the string
+        # and convert them to a list of integers
+        upper_bound =  np.linspace(args.t_end, args.t_start, args.num_steps)
+        lower_bound =  np.linspace(args.t_end * 0.5, args.t_start, args.num_steps)
+        chosen_ts = []
+        for u, l in zip(upper_bound, lower_bound):
+            try:
+                chosen_ts.append(np.random.randint(l, u))
+            except:
+                chosen_ts.append(int(l))
+
     # If the scheduling strategy is 'random', choose args.num_steps random time steps without replacement
-    if args.t_schedule == 'random':
+    elif args.t_schedule == 'random':
         chosen_ts = np.random.choice(ts, args.num_steps, replace=True)
 
     # If the scheduling strategy is 'random_down', first exclude the first 30 and last 10 time steps
