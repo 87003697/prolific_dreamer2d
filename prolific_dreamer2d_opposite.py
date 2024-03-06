@@ -21,6 +21,7 @@ from model_utils import (
             phi_vsd_grad_diffuser, 
             extract_lora_diffusers,
             predict_noise0_diffuser,
+            predict_noise_csd_diffuser,
             update_curve,
             get_images,
             get_latents,
@@ -247,9 +248,9 @@ def main():
             unet_phi = unet_phi.to(device)
             phi_params = list(unet_phi.parameters())
             vae_phi = vae
-    elif args.generation_mode == 'sds':
-        unet_phi = None
-        vae_phi = vae
+    # elif args.generation_mode == 'sds':
+    unet_phi = None
+    vae_phi = vae
     
     ### get text embedding
     text_input = tokenizer([args.prompt] * max(args.particle_num_vsd,args.particle_num_phi), padding="max_length", max_length=tokenizer.model_max_length, truncation=True, return_tensors="pt")
@@ -394,7 +395,7 @@ def main():
                     image_progress.append((image/2+0.5).clamp(0, 1))
             step += 1
     ### sds text to image generation
-    elif args.generation_mode in ['sds', 'vsd', 'ours']:
+    elif args.generation_mode in ['sds', 'vsd', 'ours', 'csd']:
         cross_attention_kwargs = {'scale': args.lora_scale} if (args.generation_mode == 'vsd' and args.phi_model == 'lora') else {}
         for step, chosen_t in enumerate(pbar):
             # get latent of all particles
@@ -411,7 +412,7 @@ def main():
             # predict x0 use ddim sampling
             # z0_latents = predict_x0_diffuser(unet, scheduler, noisy_latents, text_embeddings, t, guidance_scale=args.guidance_scale)
             # loss step
-            if args.generation_mode in ['sds', 'vsd']:
+            if args.generation_mode in ['sds', 'vsd', 'csd']:
 
                 grad_, noise_pred, noise_pred_phi = sds_vsd_grad_diffuser(unet, noisy_latents, noise, text_embeddings_vsd, t, \
                                                         guidance_scale=args.guidance_scale, unet_phi=unet_phi, \
