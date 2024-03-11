@@ -427,7 +427,10 @@ def main():
                 # construct loss
                 target = (latents_vsd - grad_).detach()
             else:
-                delta_t = args.plus_ratio * (chosen_t - args.t_start)
+                if args.plus_ratio > 1:
+                    delta_t = args.plus_ratio
+                else:
+                    delta_t = args.plus_ratio * (chosen_t - args.t_start)
                 if args.plus_random:
                     delta_t = delta_t * torch.rand_like(t.float())
 
